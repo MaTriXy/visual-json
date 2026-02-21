@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import type { TreeNode, NodeType } from "@visual-json/core";
 import {
   removeNode,
@@ -6,38 +6,13 @@ import {
   validateNode,
   duplicateNode,
   changeType,
-  reorderChildren,
-  moveNode,
   toJson,
 } from "@visual-json/core";
 import { useStudio } from "./context";
 import { ContextMenu, type ContextMenuEntry } from "./context-menu";
 import { getDisplayKey } from "./display-key";
-
-function getVisibleNodes(root: TreeNode, expandedIds: Set<string>): TreeNode[] {
-  const result: TreeNode[] = [];
-
-  function walk(node: TreeNode) {
-    result.push(node);
-    if (
-      expandedIds.has(node.id) &&
-      (node.type === "object" || node.type === "array")
-    ) {
-      for (const child of node.children) {
-        walk(child);
-      }
-    }
-  }
-
-  walk(root);
-  return result;
-}
-
-interface DragState {
-  draggedNodeId: string | null;
-  dropTargetNodeId: string | null;
-  dropPosition: "before" | "after" | null;
-}
+import { getVisibleNodes } from "./get-visible-nodes";
+import { useDragDrop, type DragState } from "./use-drag-drop";
 
 interface TreeNodeRowProps {
   node: TreeNode;
@@ -269,11 +244,13 @@ export function TreeView({
   const { state, actions } = useStudio();
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const [dragState, setDragState] = useState<DragState>({
-    draggedNodeId: null,
-    dropTargetNodeId: null,
-    dropPosition: null,
-  });
+  const {
+    dragState,
+    handleDragStart,
+    handleDragOver,
+    handleDragEnd,
+    handleDrop,
+  } = useDragDrop();
 
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -281,87 +258,11 @@ export function TreeView({
     node: TreeNode;
   } | null>(null);
 
-  const visibleNodes = getVisibleNodes(state.tree.root, state.expandedNodeIds);
-
-  const handleDragStart = useCallback((nodeId: string) => {
-    setDragState({
-      draggedNodeId: nodeId,
-      dropTargetNodeId: null,
-      dropPosition: null,
-    });
-  }, []);
-
-  const handleDragOver = useCallback(
-    (nodeId: string, position: "before" | "after") => {
-      setDragState((prev) => ({
-        ...prev,
-        dropTargetNodeId: nodeId,
-        dropPosition: position,
-      }));
-    },
-    [],
+  const visibleNodes = useMemo(
+    () =>
+      getVisibleNodes(state.tree.root, (id) => state.expandedNodeIds.has(id)),
+    [state.tree.root, state.expandedNodeIds],
   );
-
-  const handleDragEnd = useCallback(() => {
-    setDragState({
-      draggedNodeId: null,
-      dropTargetNodeId: null,
-      dropPosition: null,
-    });
-  }, []);
-
-  const handleDrop = useCallback(() => {
-    const { draggedNodeId, dropTargetNodeId, dropPosition } = dragState;
-    if (!draggedNodeId || !dropTargetNodeId || !dropPosition) return;
-
-    const draggedNode = state.tree.nodesById.get(draggedNodeId);
-    const targetNode = state.tree.nodesById.get(dropTargetNodeId);
-    if (!draggedNode || !targetNode) return;
-
-    if (draggedNode.parentId === targetNode.parentId && targetNode.parentId) {
-      const parent = state.tree.nodesById.get(targetNode.parentId);
-      if (parent) {
-        const fromIndex = parent.children.findIndex(
-          (c) => c.id === draggedNodeId,
-        );
-        let toIndex = parent.children.findIndex(
-          (c) => c.id === dropTargetNodeId,
-        );
-        if (dropPosition === "after") toIndex++;
-        if (fromIndex < toIndex) toIndex--;
-        if (fromIndex !== toIndex && fromIndex >= 0 && toIndex >= 0) {
-          const newTree = reorderChildren(
-            state.tree,
-            parent.id,
-            fromIndex,
-            toIndex,
-          );
-          actions.setTree(newTree);
-        }
-      }
-    } else if (targetNode.parentId) {
-      const newParent = state.tree.nodesById.get(targetNode.parentId);
-      if (newParent) {
-        let toIndex = newParent.children.findIndex(
-          (c) => c.id === dropTargetNodeId,
-        );
-        if (dropPosition === "after") toIndex++;
-        const newTree = moveNode(
-          state.tree,
-          draggedNodeId,
-          newParent.id,
-          toIndex,
-        );
-        actions.setTree(newTree);
-      }
-    }
-
-    setDragState({
-      draggedNodeId: null,
-      dropTargetNodeId: null,
-      dropPosition: null,
-    });
-  }, [dragState, state.tree, actions]);
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent, node: TreeNode) => {
@@ -597,5 +498,3 @@ export function TreeView({
     </>
   );
 }
-
-export { getVisibleNodes };

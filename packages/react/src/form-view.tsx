@@ -6,8 +6,6 @@ import {
   removeNode,
   getPropertySchema,
   resolveRef,
-  reorderChildren,
-  moveNode,
   type TreeNode,
   type JsonSchemaProperty,
   type JsonSchema,
@@ -15,12 +13,8 @@ import {
 import { useStudio } from "./context";
 import { Breadcrumbs } from "./breadcrumbs";
 import { getDisplayKey } from "./display-key";
-
-interface DragState {
-  draggedNodeId: string | null;
-  dropTargetNodeId: string | null;
-  dropPosition: "before" | "after" | null;
-}
+import { getVisibleNodes } from "./get-visible-nodes";
+import { useDragDrop, type DragState } from "./use-drag-drop";
 
 interface FormFieldProps {
   node: TreeNode;
@@ -670,26 +664,6 @@ function checkRequired(
   return parentSchema?.required?.includes(node.key) ?? false;
 }
 
-function getVisibleNodes(
-  root: TreeNode,
-  collapsedIds: Set<string>,
-): TreeNode[] {
-  const result: TreeNode[] = [];
-  function walk(node: TreeNode) {
-    result.push(node);
-    if (
-      !collapsedIds.has(node.id) &&
-      (node.type === "object" || node.type === "array")
-    ) {
-      for (const child of node.children) {
-        walk(child);
-      }
-    }
-  }
-  walk(root);
-  return result;
-}
-
 export interface FormViewProps {
   className?: string;
   showDescriptions?: boolean;
@@ -718,11 +692,13 @@ export function FormView({
   );
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFocused, setIsFocused] = useState(false);
-  const [dragState, setDragState] = useState<DragState>({
-    draggedNodeId: null,
-    dropTargetNodeId: null,
-    dropPosition: null,
-  });
+  const {
+    dragState,
+    handleDragStart,
+    handleDragOver,
+    handleDragEnd,
+    handleDrop,
+  } = useDragDrop();
 
   useEffect(() => {
     setFormSelectedNodeId(null);
@@ -731,7 +707,7 @@ export function FormView({
   }, [displayNode.id]);
 
   const visibleNodes = useMemo(
-    () => getVisibleNodes(displayNode, collapsedIds),
+    () => getVisibleNodes(displayNode, (id) => !collapsedIds.has(id)),
     [displayNode, collapsedIds],
   );
 
@@ -778,86 +754,6 @@ export function FormView({
     },
     [state.tree],
   );
-
-  const handleDragStart = useCallback((nodeId: string) => {
-    setDragState({
-      draggedNodeId: nodeId,
-      dropTargetNodeId: null,
-      dropPosition: null,
-    });
-  }, []);
-
-  const handleDragOver = useCallback(
-    (nodeId: string, position: "before" | "after") => {
-      setDragState((prev) => ({
-        ...prev,
-        dropTargetNodeId: nodeId,
-        dropPosition: position,
-      }));
-    },
-    [],
-  );
-
-  const handleDragEnd = useCallback(() => {
-    setDragState({
-      draggedNodeId: null,
-      dropTargetNodeId: null,
-      dropPosition: null,
-    });
-  }, []);
-
-  const handleDrop = useCallback(() => {
-    const { draggedNodeId, dropTargetNodeId, dropPosition } = dragState;
-    if (!draggedNodeId || !dropTargetNodeId || !dropPosition) return;
-
-    const draggedNode = state.tree.nodesById.get(draggedNodeId);
-    const targetNode = state.tree.nodesById.get(dropTargetNodeId);
-    if (!draggedNode || !targetNode) return;
-
-    if (draggedNode.parentId && draggedNode.parentId === targetNode.parentId) {
-      const parent = state.tree.nodesById.get(draggedNode.parentId);
-      if (parent) {
-        const fromIndex = parent.children.findIndex(
-          (c) => c.id === draggedNodeId,
-        );
-        let toIndex = parent.children.findIndex(
-          (c) => c.id === dropTargetNodeId,
-        );
-        if (dropPosition === "after") toIndex++;
-        if (fromIndex < toIndex) toIndex--;
-        if (fromIndex !== toIndex && fromIndex >= 0 && toIndex >= 0) {
-          const newTree = reorderChildren(
-            state.tree,
-            parent.id,
-            fromIndex,
-            toIndex,
-          );
-          actions.setTree(newTree);
-        }
-      }
-    } else if (targetNode.parentId) {
-      const newParent = state.tree.nodesById.get(targetNode.parentId);
-      if (newParent) {
-        let toIndex = newParent.children.findIndex(
-          (c) => c.id === dropTargetNodeId,
-        );
-        if (dropPosition === "after") toIndex++;
-        const newTree = moveNode(
-          state.tree,
-          draggedNodeId,
-          newParent.id,
-          toIndex,
-        );
-        actions.setTree(newTree);
-      }
-    }
-
-    setDragState({
-      draggedNodeId: null,
-      dropTargetNodeId: null,
-      dropPosition: null,
-    });
-  }, [dragState, state.tree, actions]);
 
   const scrollToNode = useCallback((nodeId: string) => {
     requestAnimationFrame(() => {

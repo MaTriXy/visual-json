@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { JsonValue, JsonSchema } from "@visual-json/core";
 import { resolveSchema } from "@visual-json/core";
-import { JsonEditor, DiffView } from "@visual-json/react";
+import { JsonEditor } from "@visual-json/react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -34,7 +34,7 @@ import {
   X,
 } from "lucide-react";
 
-type ViewMode = "tree" | "diff" | "raw";
+type ViewMode = "tree" | "raw";
 
 const VIEW_MODES: { id: ViewMode; label: string }[] = [
   { id: "tree", label: "Tree" },
@@ -296,7 +296,6 @@ export function Editor({
   const [viewMode, setViewMode] = useState<ViewMode>("tree");
   const [schema, setSchema] = useState<JsonSchema | null>(null);
   const [filename, setFilename] = useState(samples[0].filename);
-  const [originalJson, setOriginalJson] = useState<JsonValue>(samples[0].data);
   const [isDragOver, setIsDragOver] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(defaultSidebarOpen);
   const [treeShowValues, setTreeShowValues] = useState(false);
@@ -321,13 +320,12 @@ export function Editor({
     return () => {
       cancelled = true;
     };
-  }, [filename, jsonValue]);
+  }, [filename]);
 
   const loadJson = useCallback((text: string, fname: string) => {
     try {
       const parsed = JSON.parse(text);
       setJsonValue(parsed);
-      setOriginalJson(structuredClone(parsed));
       setFilename(fname);
       setActiveSample(fname);
       setSchema(null);
@@ -345,7 +343,6 @@ export function Editor({
       setActiveSample(fname);
       setFilename(fname);
       setJsonValue(sample.data);
-      setOriginalJson(structuredClone(sample.data));
       setSchema(null);
       setRawText(JSON.stringify(sample.data, null, 2));
       setRawError(null);
@@ -454,7 +451,10 @@ export function Editor({
       {parseError && (
         <div className="flex items-center justify-between px-3 py-1.5 text-xs bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400 border-b border-border shrink-0">
           <span>{parseError}</span>
-          <button onClick={() => setParseError(null)}>
+          <button
+            onClick={() => setParseError(null)}
+            aria-label="Dismiss error"
+          >
             <X className="h-3 w-3" />
           </button>
         </div>
@@ -637,8 +637,6 @@ export function Editor({
               className="flex-1 w-full bg-transparent text-foreground font-mono text-sm p-4 resize-none outline-none border-none leading-relaxed"
             />
           </div>
-        ) : viewMode === "diff" ? (
-          <DiffView originalJson={originalJson} currentJson={jsonValue} />
         ) : (
           <JsonEditor
             value={jsonValue}

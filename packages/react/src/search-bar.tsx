@@ -104,6 +104,7 @@ export function SearchBar({ className }: SearchBarProps) {
             <button
               onClick={actions.prevSearchMatch}
               disabled={matchCount === 0}
+              aria-label="Previous match (Shift+Enter)"
               style={{
                 background: "none",
                 border: "none",
@@ -128,6 +129,7 @@ export function SearchBar({ className }: SearchBarProps) {
             <button
               onClick={actions.nextSearchMatch}
               disabled={matchCount === 0}
+              aria-label="Next match (Enter)"
               style={{
                 background: "none",
                 border: "none",
@@ -151,6 +153,7 @@ export function SearchBar({ className }: SearchBarProps) {
             </button>
             <button
               onClick={() => actions.setSearchQuery("")}
+              aria-label="Clear search (Esc)"
               style={{
                 background: "none",
                 border: "none",
@@ -174,6 +177,7 @@ export function SearchBar({ className }: SearchBarProps) {
           <>
             <button
               onClick={actions.expandAll}
+              aria-label="Expand all"
               style={{
                 background: "none",
                 border: "none",
@@ -204,6 +208,7 @@ export function SearchBar({ className }: SearchBarProps) {
             </button>
             <button
               onClick={actions.collapseAll}
+              aria-label="Collapse all"
               style={{
                 background: "none",
                 border: "none",

@@ -48,6 +48,7 @@ export function VisualJson({
   );
 
   const historyRef = useRef<History>(new History());
+  const isInternalChange = useRef(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
@@ -64,15 +65,33 @@ export function VisualJson({
     setCanRedo(historyRef.current.canRedo);
   }, []);
 
+  useEffect(() => {
+    if (isInternalChange.current) {
+      isInternalChange.current = false;
+      return;
+    }
+    const newTree = fromJson(value);
+    setTreeState(newTree);
+    setExpandedNodeIds(new Set([newTree.root.id]));
+    setSelectedNodeId(null);
+    historyRef.current = new History();
+    historyRef.current.push(newTree);
+    setCanUndo(false);
+    setCanRedo(false);
+    setSearchQueryState("");
+    setSearchMatches([]);
+    setSearchMatchIndex(0);
+    setSearchMatchNodeIds(new Set());
+  }, [value]);
+
   const setTree = useCallback(
     (newTree: TreeState) => {
       setTreeState(newTree);
       historyRef.current.push(newTree);
       setCanUndo(historyRef.current.canUndo);
       setCanRedo(historyRef.current.canRedo);
-      if (onChange) {
-        onChange(toJson(newTree.root));
-      }
+      isInternalChange.current = true;
+      onChange?.(toJson(newTree.root));
     },
     [onChange],
   );
@@ -83,9 +102,8 @@ export function VisualJson({
       setTreeState(prev);
       setCanUndo(historyRef.current.canUndo);
       setCanRedo(historyRef.current.canRedo);
-      if (onChange) {
-        onChange(toJson(prev.root));
-      }
+      isInternalChange.current = true;
+      onChange?.(toJson(prev.root));
     }
   }, [onChange]);
 
@@ -95,9 +113,8 @@ export function VisualJson({
       setTreeState(next);
       setCanUndo(historyRef.current.canUndo);
       setCanRedo(historyRef.current.canRedo);
-      if (onChange) {
-        onChange(toJson(next.root));
-      }
+      isInternalChange.current = true;
+      onChange?.(toJson(next.root));
     }
   }, [onChange]);
 

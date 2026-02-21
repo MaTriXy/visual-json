@@ -6,12 +6,41 @@ import { cookies } from "next/headers";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { DocsChat } from "@/components/docs-chat";
+import { PAGE_TITLES } from "@/lib/page-titles";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "visual-json",
+  metadataBase: new URL("https://visual-json.dev"),
+  title: {
+    default: `visual-json | ${PAGE_TITLES[""]!.replace(/\n/g, " ")}`,
+    template: "%s | visual-json",
+  },
   description:
     "A visual JSON editor for humans. Tree view, form view, diff view, and more.",
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "https://visual-json.dev",
+    siteName: "visual-json",
+    title: "visual-json | The Visual JSON Editor for Humans",
+    description:
+      "A visual JSON editor for humans. Tree view, form view, diff view, and more.",
+    images: [
+      {
+        url: "/og",
+        width: 1200,
+        height: 630,
+        alt: "visual-json - The Visual JSON Editor for Humans",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "visual-json | The Visual JSON Editor for Humans",
+    description:
+      "A visual JSON editor for humans. Tree view, form view, diff view, and more.",
+    images: ["/og"],
+  },
 };
 
 function Header() {

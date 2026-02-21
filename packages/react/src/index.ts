@@ -2,7 +2,8 @@ export { JsonEditor, type JsonEditorProps } from "./json-editor";
 export type { JsonValue, JsonSchema } from "@visual-json/core";
 
 export { VisualJson, type VisualJsonProps } from "./visual-json";
-export { TreeView, type TreeViewProps, getVisibleNodes } from "./tree-view";
+export { TreeView, type TreeViewProps } from "./tree-view";
+export { getVisibleNodes } from "./get-visible-nodes";
 export { PropertyEditor, type PropertyEditorProps } from "./property-editor";
 export { Breadcrumbs, type BreadcrumbsProps } from "./breadcrumbs";
 export { SearchBar, type SearchBarProps } from "./search-bar";
