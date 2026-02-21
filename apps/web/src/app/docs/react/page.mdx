@@ -111,28 +111,6 @@ import { SearchBar } from "@visual-json/react";
 <SearchBar className="w-full" />
 ```
 
-## NodeIcon
-
-Renders a type icon for a tree node (`S` for string, `N` for number, `B` for boolean,
-`O` for object, `A` for array, `0` for null).
-
-```tsx
-import { NodeIcon } from "@visual-json/react";
-
-<NodeIcon type="string" />
-<NodeIcon type="object" error />
-```
-
-<table>
-  <thead>
-    <tr><th>Prop</th><th>Type</th><th>Description</th></tr>
-  </thead>
-  <tbody>
-    <tr><td><code>type</code></td><td><code>NodeType</code></td><td>The node type to display</td></tr>
-    <tr><td><code>error</code></td><td><code>boolean</code></td><td>Show error styling</td></tr>
-  </tbody>
-</table>
-
 ## ContextMenu
 
 Rendered by TreeView on right-click. Can also be used standalone.

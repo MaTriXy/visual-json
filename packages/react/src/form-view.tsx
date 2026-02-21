@@ -151,19 +151,18 @@ function FormField({
         parsed = null;
       } else if (
         propSchema?.type === "number" ||
-        propSchema?.type === "integer"
+        propSchema?.type === "integer" ||
+        node.type === "number"
       ) {
         const num = Number(newValue);
         parsed = isNaN(num) ? newValue : num;
-      } else if (!isNaN(Number(newValue)) && newValue.trim() !== "") {
-        parsed = Number(newValue);
       } else {
         parsed = newValue;
       }
       const newTree = setValue(state.tree, node.id, parsed);
       actions.setTree(newTree);
     },
-    [state.tree, node.id, actions, propSchema],
+    [state.tree, node.id, node.type, actions, propSchema],
   );
 
   const handleKeyChange = useCallback(

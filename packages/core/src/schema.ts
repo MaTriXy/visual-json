@@ -19,6 +19,7 @@ const KNOWN_SCHEMAS: Record<string, string> = {
   ".swcrc": "https://json.schemastore.org/swcrc",
 };
 
+const MAX_SCHEMA_CACHE = 50;
 const schemaCache = new Map<string, JsonSchema>();
 
 async function fetchSchema(url: string): Promise<JsonSchema | null> {
@@ -29,6 +30,10 @@ async function fetchSchema(url: string): Promise<JsonSchema | null> {
     const res = await fetch(url);
     if (!res.ok) return null;
     const schema = (await res.json()) as JsonSchema;
+    if (schemaCache.size >= MAX_SCHEMA_CACHE) {
+      const oldest = schemaCache.keys().next().value;
+      if (oldest !== undefined) schemaCache.delete(oldest);
+    }
     schemaCache.set(url, schema);
     return schema;
   } catch {
@@ -208,15 +213,17 @@ export function getPropertySchema(
 
     if (current.anyOf || current.oneOf) {
       const variants = current.anyOf ?? current.oneOf ?? [];
+      let found: JsonSchemaProperty | undefined;
       for (const variant of variants) {
         const resolved = resolveRef(variant, root);
-        const found = getPropertySchema(resolved, seg, root);
-        if (found) {
-          current = found;
-          break;
-        }
+        found = getPropertySchema(resolved, seg, root);
+        if (found) break;
       }
-      if (current) continue;
+      if (found) {
+        current = found;
+        continue;
+      }
+      return undefined;
     }
 
     return undefined;

@@ -1,0 +1,232 @@
+import { describe, it, expect, beforeEach } from "vitest";
+import {
+  fromJson,
+  toJson,
+  resetIdCounter,
+  setValue,
+  setKey,
+  addProperty,
+  removeNode,
+  moveNode,
+  reorderChildren,
+  changeType,
+  duplicateNode,
+} from "../../src";
+
+beforeEach(() => {
+  resetIdCounter();
+});
+
+describe("setValue", () => {
+  it("updates a primitive value", () => {
+    const state = fromJson({ a: 1 });
+    const child = state.root.children[0];
+    const next = setValue(state, child.id, 42);
+    expect(toJson(next.root)).toEqual({ a: 42 });
+  });
+
+  it("preserves sibling IDs", () => {
+    const state = fromJson({ a: 1, b: 2 });
+    const [a, b] = state.root.children;
+    const next = setValue(state, a.id, 99);
+    const newB = next.root.children.find((c) => c.key === "b");
+    expect(newB?.id).toBe(b.id);
+  });
+
+  it("preserves root ID", () => {
+    const state = fromJson({ a: 1 });
+    const child = state.root.children[0];
+    const next = setValue(state, child.id, 99);
+    expect(next.root.id).toBe(state.root.id);
+  });
+
+  it("replaces a primitive with an object", () => {
+    const state = fromJson({ a: 1 });
+    const child = state.root.children[0];
+    const next = setValue(state, child.id, { nested: true });
+    expect(toJson(next.root)).toEqual({ a: { nested: true } });
+    expect(next.root.children[0].id).toBe(child.id);
+  });
+
+  it("replaces the root value", () => {
+    const state = fromJson(42);
+    const next = setValue(state, state.root.id, "hello");
+    expect(toJson(next.root)).toBe("hello");
+  });
+});
+
+describe("setKey", () => {
+  it("renames an object key", () => {
+    const state = fromJson({ old: 1 });
+    const child = state.root.children[0];
+    const next = setKey(state, child.id, "renamed");
+    expect(toJson(next.root)).toEqual({ renamed: 1 });
+  });
+
+  it("updates paths of children after rename", () => {
+    const state = fromJson({ parent: { child: 1 } });
+    const parent = state.root.children[0];
+    const next = setKey(state, parent.id, "newParent");
+    const child = next.root.children[0].children[0];
+    expect(child.path).toBe("/newParent/child");
+  });
+
+  it("does not rename array item keys", () => {
+    const state = fromJson([1, 2]);
+    const child = state.root.children[0];
+    const next = setKey(state, child.id, "notAllowed");
+    expect(toJson(next.root)).toEqual([1, 2]);
+  });
+});
+
+describe("addProperty", () => {
+  it("adds to an object", () => {
+    const state = fromJson({ a: 1 });
+    const next = addProperty(state, state.root.id, "b", 2);
+    expect(toJson(next.root)).toEqual({ a: 1, b: 2 });
+  });
+
+  it("appends to an array", () => {
+    const state = fromJson([1, 2]);
+    const next = addProperty(state, state.root.id, "2", 3);
+    expect(toJson(next.root)).toEqual([1, 2, 3]);
+  });
+
+  it("preserves existing child IDs", () => {
+    const state = fromJson({ a: 1 });
+    const aId = state.root.children[0].id;
+    const next = addProperty(state, state.root.id, "b", 2);
+    const aNode = next.root.children.find((c) => c.key === "a");
+    expect(aNode?.id).toBe(aId);
+  });
+});
+
+describe("removeNode", () => {
+  it("removes a property from an object", () => {
+    const state = fromJson({ a: 1, b: 2 });
+    const a = state.root.children.find((c) => c.key === "a")!;
+    const next = removeNode(state, a.id);
+    expect(toJson(next.root)).toEqual({ b: 2 });
+  });
+
+  it("removes an item from an array and re-indexes", () => {
+    const state = fromJson([10, 20, 30]);
+    const mid = state.root.children[1];
+    const next = removeNode(state, mid.id);
+    expect(toJson(next.root)).toEqual([10, 30]);
+    expect(next.root.children[0].key).toBe("0");
+    expect(next.root.children[1].key).toBe("1");
+  });
+
+  it("preserves IDs of remaining siblings", () => {
+    const state = fromJson({ a: 1, b: 2, c: 3 });
+    const b = state.root.children.find((c) => c.key === "b")!;
+    const cId = state.root.children.find((c) => c.key === "c")!.id;
+    const next = removeNode(state, b.id);
+    const cNode = next.root.children.find((c) => c.key === "c");
+    expect(cNode?.id).toBe(cId);
+  });
+
+  it("does not remove the root", () => {
+    const state = fromJson({ a: 1 });
+    const next = removeNode(state, state.root.id);
+    expect(next).toBe(state);
+  });
+});
+
+describe("moveNode", () => {
+  it("moves a node to a new parent", () => {
+    const state = fromJson({ src: { val: 1 }, dst: {} });
+    const val = state.root.children[0].children[0];
+    const dst = state.root.children[1];
+    const next = moveNode(state, val.id, dst.id);
+    expect(toJson(next.root)).toEqual({ src: {}, dst: { val: 1 } });
+  });
+
+  it("moves within the same parent at a specific index", () => {
+    const state = fromJson([10, 20, 30]);
+    const last = state.root.children[2];
+    const next = moveNode(state, last.id, state.root.id, 0);
+    expect(toJson(next.root)).toEqual([30, 10, 20]);
+  });
+});
+
+describe("reorderChildren", () => {
+  it("reorders object keys", () => {
+    const state = fromJson({ a: 1, b: 2, c: 3 });
+    const next = reorderChildren(state, state.root.id, 0, 2);
+    expect(Object.keys(toJson(next.root) as Record<string, unknown>)).toEqual([
+      "b",
+      "c",
+      "a",
+    ]);
+  });
+
+  it("reorders array elements and re-indexes", () => {
+    const state = fromJson([10, 20, 30]);
+    const next = reorderChildren(state, state.root.id, 2, 0);
+    expect(toJson(next.root)).toEqual([30, 10, 20]);
+    expect(next.root.children.map((c) => c.key)).toEqual(["0", "1", "2"]);
+  });
+});
+
+describe("changeType", () => {
+  it("converts a string to a number", () => {
+    const state = fromJson({ val: "42" });
+    const child = state.root.children[0];
+    const next = changeType(state, child.id, "number");
+    expect(toJson(next.root)).toEqual({ val: 42 });
+  });
+
+  it("converts a number to a string", () => {
+    const state = fromJson({ val: 42 });
+    const child = state.root.children[0];
+    const next = changeType(state, child.id, "string");
+    expect(toJson(next.root)).toEqual({ val: "42" });
+  });
+
+  it("converts a primitive to an array", () => {
+    const state = fromJson({ val: 5 });
+    const child = state.root.children[0];
+    const next = changeType(state, child.id, "array");
+    expect(toJson(next.root)).toEqual({ val: [5] });
+  });
+
+  it("converts to null", () => {
+    const state = fromJson({ val: "hello" });
+    const child = state.root.children[0];
+    const next = changeType(state, child.id, "null");
+    expect(toJson(next.root)).toEqual({ val: null });
+  });
+});
+
+describe("duplicateNode", () => {
+  it("duplicates an object property", () => {
+    const state = fromJson({ a: 1, b: 2 });
+    const a = state.root.children[0];
+    const next = duplicateNode(state, a.id);
+    const json = toJson(next.root) as Record<string, unknown>;
+    expect(json).toEqual({ a: 1, a_copy: 1, b: 2 });
+  });
+
+  it("duplicates an array item", () => {
+    const state = fromJson([10, 20]);
+    const first = state.root.children[0];
+    const next = duplicateNode(state, first.id);
+    expect(toJson(next.root)).toEqual([10, 10, 20]);
+  });
+
+  it("assigns a new ID to the duplicate", () => {
+    const state = fromJson({ a: 1 });
+    const a = state.root.children[0];
+    const next = duplicateNode(state, a.id);
+    const ids = next.root.children.map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("does not duplicate the root", () => {
+    const state = fromJson({ a: 1 });
+    const next = duplicateNode(state, state.root.id);
+    expect(next).toBe(state);
+  });
+});

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export interface ContextMenuItem {
   label: string;
@@ -22,6 +22,18 @@ export interface ContextMenuProps {
 
 export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: x, top: y });
+
+  useEffect(() => {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    setPos({
+      left: rect.right > vw ? Math.max(0, x - rect.width) : x,
+      top: rect.bottom > vh ? Math.max(0, y - rect.height) : y,
+    });
+  }, [x, y]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -45,8 +57,8 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
       ref={ref}
       style={{
         position: "fixed",
-        left: x,
-        top: y,
+        left: pos.left,
+        top: pos.top,
         zIndex: 10000,
         backgroundColor: "var(--vj-bg-panel, #252526)",
         border: "1px solid var(--vj-border, #454545)",

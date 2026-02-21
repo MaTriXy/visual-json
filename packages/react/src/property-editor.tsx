@@ -7,6 +7,8 @@ import {
   changeType,
   duplicateNode,
   toJson,
+  getPropertySchema,
+  resolveRef,
   type TreeNode,
   type NodeType,
   type JsonSchemaProperty,
@@ -38,7 +40,13 @@ function PropertyRow({ node, schemaProperty }: PropertyRowProps) {
     if (newValue === "null") parsed = null;
     else if (newValue === "true") parsed = true;
     else if (newValue === "false") parsed = false;
-    else if (!isNaN(Number(newValue)) && newValue.trim() !== "")
+    else if (
+      (node.type === "number" ||
+        schemaProperty?.type === "number" ||
+        schemaProperty?.type === "integer") &&
+      !isNaN(Number(newValue)) &&
+      newValue.trim() !== ""
+    )
       parsed = Number(newValue);
     else parsed = newValue;
 
@@ -302,29 +310,13 @@ export function PropertyEditor({ className }: PropertyEditorProps) {
   const schemaTitle = schema?.title;
 
   function getChildSchema(childKey: string): JsonSchemaProperty | undefined {
-    if (!schema) return undefined;
-
-    const pathSegments = selectedNode!.path.split("/").filter(Boolean);
-
-    let current: JsonSchemaProperty | undefined = schema;
-    for (const seg of pathSegments) {
-      if (!current) return undefined;
-      if (current.properties?.[seg]) {
-        current = current.properties[seg];
-      } else if (current.items && !Array.isArray(current.items)) {
-        current = current.items;
-      } else {
-        return undefined;
-      }
-    }
-
-    if (current?.properties?.[childKey]) {
-      return current.properties[childKey];
-    }
-    if (current?.items && !Array.isArray(current.items)) {
-      return current.items;
-    }
-    return undefined;
+    if (!schema || !selectedNode) return undefined;
+    const childPath =
+      selectedNode.path === "/"
+        ? `/${childKey}`
+        : `${selectedNode.path}/${childKey}`;
+    const raw = getPropertySchema(schema, childPath);
+    return raw ? resolveRef(raw, schema) : undefined;
   }
 
   function handleAdd() {

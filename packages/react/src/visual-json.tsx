@@ -204,6 +204,16 @@ export function VisualJson({
     setSelectedNodeId(searchMatches[prevIdx].nodeId);
   }, [searchMatches, searchMatchIndex]);
 
+  useEffect(() => {
+    if (!searchQuery.trim()) return;
+    const matches = searchNodes(tree, searchQuery);
+    setSearchMatches(matches);
+    setSearchMatchIndex((prev) =>
+      Math.min(prev, Math.max(matches.length - 1, 0)),
+    );
+    setSearchMatchNodeIds(new Set(matches.map((m) => m.nodeId)));
+  }, [tree]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const state: StudioState = useMemo(
     () => ({
       tree,

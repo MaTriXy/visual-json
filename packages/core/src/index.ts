@@ -16,6 +16,9 @@ export {
   findNode,
   findNodeByPath,
   resetIdCounter,
+  getNodeType,
+  generateId,
+  buildSubtree,
 } from "./tree";
 
 export {
@@ -25,7 +28,6 @@ export {
   removeNode,
   moveNode,
   reorderChildren,
-  getNodeType,
   changeType,
   duplicateNode,
 } from "./operations";

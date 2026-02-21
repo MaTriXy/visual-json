@@ -8,7 +8,6 @@ const DIFF_COLORS: Record<
   added: { bg: "#1e3a1e", marker: "+", label: "#4ec94e" },
   removed: { bg: "#3a1e1e", marker: "-", label: "#f48771" },
   changed: { bg: "#3a3a1e", marker: "~", label: "#dcdcaa" },
-  unchanged: { bg: "transparent", marker: " ", label: "#666666" },
 };
 
 function formatValue(value: unknown): string {

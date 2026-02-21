@@ -10,7 +10,7 @@ import type {
 
 let nextId = 0;
 
-function generateId(): string {
+export function generateId(): string {
   return `node_${++nextId}`;
 }
 
@@ -18,13 +18,13 @@ export function resetIdCounter(): void {
   nextId = 0;
 }
 
-function getNodeType(value: JsonValue): NodeType {
+export function getNodeType(value: JsonValue): NodeType {
   if (value === null) return "null";
   if (Array.isArray(value)) return "array";
   return typeof value as NodeType;
 }
 
-function buildNode(
+export function buildSubtree(
   key: string,
   value: JsonValue,
   parentPath: string,
@@ -53,12 +53,12 @@ function buildNode(
   if (type === "object" && value !== null) {
     const obj = value as JsonObject;
     node.children = Object.keys(obj).map((childKey) =>
-      buildNode(childKey, obj[childKey], path, id, nodesById),
+      buildSubtree(childKey, obj[childKey], path, id, nodesById),
     );
   } else if (type === "array") {
     const arr = value as JsonArray;
     node.children = arr.map((item, index) =>
-      buildNode(String(index), item, path, id, nodesById),
+      buildSubtree(String(index), item, path, id, nodesById),
     );
   }
 
@@ -66,7 +66,6 @@ function buildNode(
 }
 
 export function fromJson(value: JsonValue): TreeState {
-  resetIdCounter();
   const nodesById = new Map<string, TreeNode>();
 
   const rootType = getNodeType(value);
@@ -88,12 +87,12 @@ export function fromJson(value: JsonValue): TreeState {
   if (rootType === "object" && value !== null) {
     const obj = value as JsonObject;
     root.children = Object.keys(obj).map((key) =>
-      buildNode(key, obj[key], "", root.id, nodesById),
+      buildSubtree(key, obj[key], "", root.id, nodesById),
     );
   } else if (rootType === "array") {
     const arr = value as JsonArray;
     root.children = arr.map((item, index) =>
-      buildNode(String(index), item, "", root.id, nodesById),
+      buildSubtree(String(index), item, "", root.id, nodesById),
     );
   }
 

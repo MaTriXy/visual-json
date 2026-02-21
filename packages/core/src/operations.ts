@@ -1,29 +1,84 @@
-import type { JsonValue, NodeType, TreeNode, TreeState } from "./types";
-import { fromJson, toJson } from "./tree";
+import type {
+  JsonPrimitive,
+  JsonValue,
+  NodeType,
+  TreeNode,
+  TreeState,
+} from "./types";
+import {
+  toJson,
+  getNodeType,
+  generateId,
+  buildSubtree,
+} from "./tree";
 
-function applyToJson(
-  state: TreeState,
-  mutate: (json: JsonValue) => JsonValue,
-): TreeState {
-  const json = toJson(state.root);
-  return fromJson(mutate(json));
-}
-
-function getAtPath(obj: JsonValue, segments: string[]): JsonValue | undefined {
-  let current: JsonValue = obj;
-  for (const seg of segments) {
-    if (current === null || typeof current !== "object") return undefined;
-    if (Array.isArray(current)) {
-      current = current[Number(seg)];
-    } else {
-      current = (current as Record<string, JsonValue>)[seg];
-    }
+function rebuildMap(root: TreeNode): Map<string, TreeNode> {
+  const map = new Map<string, TreeNode>();
+  function walk(node: TreeNode) {
+    map.set(node.id, node);
+    for (const child of node.children) walk(child);
   }
-  return current;
+  walk(root);
+  return map;
 }
 
-function pathSegments(node: TreeNode): string[] {
-  return node.path.split("/").filter(Boolean);
+function recomputePaths(node: TreeNode, newParentPath: string): TreeNode {
+  const newPath = newParentPath
+    ? `${newParentPath}/${node.key}`
+    : `/${node.key}`;
+  if (node.path === newPath && node.children.length === 0) return node;
+  return {
+    ...node,
+    path: newPath,
+    children: node.children.map((child) => recomputePaths(child, newPath)),
+  };
+}
+
+/**
+ * Clone only the ancestor chain from root to `targetId` (structural sharing),
+ * apply `updater` to the target, and rebuild the `nodesById` map.
+ */
+function clonePathToNode(
+  state: TreeState,
+  targetId: string,
+  updater: (node: TreeNode) => TreeNode,
+): TreeState {
+  const chain: string[] = [];
+  let cur: TreeNode | undefined = state.nodesById.get(targetId);
+  while (cur) {
+    chain.unshift(cur.id);
+    cur = cur.parentId ? state.nodesById.get(cur.parentId) : undefined;
+  }
+  if (chain.length === 0) return state;
+
+  function cloneAlongPath(node: TreeNode, depth: number): TreeNode {
+    if (depth === chain.length - 1) {
+      return updater(node);
+    }
+    const nextInChain = chain[depth + 1];
+    return {
+      ...node,
+      children: node.children.map((child) =>
+        child.id === nextInChain ? cloneAlongPath(child, depth + 1) : child,
+      ),
+    };
+  }
+
+  const newRoot = cloneAlongPath(state.root, 0);
+  return { root: newRoot, nodesById: rebuildMap(newRoot) };
+}
+
+function reindexArrayChildren(parent: TreeNode): TreeNode {
+  if (parent.type !== "array") return parent;
+  const parentPath = parent.path === "/" ? "" : parent.path;
+  return {
+    ...parent,
+    children: parent.children.map((child, i) => {
+      const newKey = String(i);
+      if (child.key === newKey) return child;
+      return recomputePaths({ ...child, key: newKey }, parentPath);
+    }),
+  };
 }
 
 export function setValue(
@@ -34,25 +89,22 @@ export function setValue(
   const node = state.nodesById.get(nodeId);
   if (!node) return state;
 
-  return applyToJson(state, (json) => {
-    const segments = pathSegments(node);
-    if (segments.length === 0) return value;
+  const newType = getNodeType(value);
 
-    const clone = structuredClone(json);
-    const parentSegments = segments.slice(0, -1);
-    const lastKey = segments[segments.length - 1];
-    const parent =
-      parentSegments.length === 0 ? clone : getAtPath(clone, parentSegments);
+  if (newType !== "object" && newType !== "array") {
+    return clonePathToNode(state, nodeId, (n) => ({
+      ...n,
+      type: newType,
+      value: value as JsonPrimitive,
+      children: [],
+    }));
+  }
 
-    if (parent !== null && typeof parent === "object") {
-      if (Array.isArray(parent)) {
-        parent[Number(lastKey)] = value;
-      } else {
-        (parent as Record<string, JsonValue>)[lastKey] = value;
-      }
-    }
-
-    return clone;
+  return clonePathToNode(state, nodeId, (n) => {
+    const parentPath = n.path.split("/").slice(0, -1).join("/") || "";
+    const nodesById = new Map<string, TreeNode>();
+    const subtree = buildSubtree(n.key, value, parentPath, n.parentId, nodesById);
+    return { ...subtree, id: n.id };
   });
 }
 
@@ -67,28 +119,16 @@ export function setKey(
   const parent = state.nodesById.get(node.parentId);
   if (!parent || parent.type !== "object") return state;
 
-  return applyToJson(state, (json) => {
-    const clone = structuredClone(json);
-    const parentSegments = pathSegments(parent);
-    const parentObj =
-      parentSegments.length === 0 ? clone : getAtPath(clone, parentSegments);
-
-    if (
-      parentObj !== null &&
-      typeof parentObj === "object" &&
-      !Array.isArray(parentObj)
-    ) {
-      const obj = parentObj as Record<string, JsonValue>;
-      const oldKey = node.key;
-      const entries = Object.entries(obj);
-      const newEntries = entries.map(([k, v]) =>
-        k === oldKey ? [newKey, v] : [k, v],
+  return clonePathToNode(state, nodeId, (n) => {
+    const parentPath = parent.path === "/" ? "" : parent.path;
+    const newPath = `${parentPath}/${newKey}`;
+    const updated: TreeNode = { ...n, key: newKey, path: newPath };
+    if (updated.children.length > 0) {
+      updated.children = updated.children.map((child) =>
+        recomputePaths(child, newPath),
       );
-      for (const key of Object.keys(obj)) delete obj[key];
-      for (const [k, v] of newEntries) obj[k as string] = v as JsonValue;
     }
-
-    return clone;
+    return updated;
   });
 }
 
@@ -101,20 +141,11 @@ export function addProperty(
   const parent = state.nodesById.get(parentId);
   if (!parent) return state;
 
-  return applyToJson(state, (json) => {
-    const clone = structuredClone(json);
-    const segments = pathSegments(parent);
-    const target = segments.length === 0 ? clone : getAtPath(clone, segments);
-
-    if (target !== null && typeof target === "object") {
-      if (Array.isArray(target)) {
-        target.push(value);
-      } else {
-        (target as Record<string, JsonValue>)[key] = value;
-      }
-    }
-
-    return clone;
+  return clonePathToNode(state, parentId, (p) => {
+    const parentPath = p.path === "/" ? "" : p.path;
+    const nodesById = new Map<string, TreeNode>();
+    const newChild = buildSubtree(key, value, parentPath, p.id, nodesById);
+    return { ...p, children: [...p.children, newChild] };
   });
 }
 
@@ -122,24 +153,9 @@ export function removeNode(state: TreeState, nodeId: string): TreeState {
   const node = state.nodesById.get(nodeId);
   if (!node || !node.parentId) return state;
 
-  const parent = state.nodesById.get(node.parentId);
-  if (!parent) return state;
-
-  return applyToJson(state, (json) => {
-    const clone = structuredClone(json);
-    const parentSegments = pathSegments(parent);
-    const target =
-      parentSegments.length === 0 ? clone : getAtPath(clone, parentSegments);
-
-    if (target !== null && typeof target === "object") {
-      if (Array.isArray(target)) {
-        target.splice(Number(node.key), 1);
-      } else {
-        delete (target as Record<string, JsonValue>)[node.key];
-      }
-    }
-
-    return clone;
+  return clonePathToNode(state, node.parentId, (p) => {
+    const newChildren = p.children.filter((c) => c.id !== nodeId);
+    return reindexArrayChildren({ ...p, children: newChildren });
   });
 }
 
@@ -158,51 +174,25 @@ export function moveNode(
 
   const nodeValue = toJson(node);
 
-  return applyToJson(state, (json) => {
-    const clone = structuredClone(json);
+  const removed = clonePathToNode(state, node.parentId, (p) => {
+    const newChildren = p.children.filter((c) => c.id !== nodeId);
+    return reindexArrayChildren({ ...p, children: newChildren });
+  });
 
-    const srcSegs = pathSegments(srcParent);
-    const src = srcSegs.length === 0 ? clone : getAtPath(clone, srcSegs);
-    if (src !== null && typeof src === "object") {
-      if (Array.isArray(src)) {
-        src.splice(Number(node.key), 1);
-      } else {
-        delete (src as Record<string, JsonValue>)[node.key];
-      }
-    }
-
-    let dstSegs = pathSegments(dstParent);
-    if (srcParent.type === "array") {
-      const removedIdx = Number(node.key);
-      const prefixLen = srcSegs.length;
-      if (
-        dstSegs.length > prefixLen &&
-        dstSegs.slice(0, prefixLen).every((s, i) => s === srcSegs[i])
-      ) {
-        const throughIdx = Number(dstSegs[prefixLen]);
-        if (!isNaN(throughIdx) && throughIdx > removedIdx) {
-          dstSegs = [...dstSegs];
-          dstSegs[prefixLen] = String(throughIdx - 1);
-        }
-      }
-    }
-
-    const dst = dstSegs.length === 0 ? clone : getAtPath(clone, dstSegs);
-    if (dst !== null && typeof dst === "object") {
-      if (Array.isArray(dst)) {
-        const insertAt = index ?? dst.length;
-        dst.splice(insertAt, 0, nodeValue);
-      } else {
-        const obj = dst as Record<string, JsonValue>;
-        const entries = Object.entries(obj);
-        const insertAt = index ?? entries.length;
-        entries.splice(insertAt, 0, [node.key, nodeValue]);
-        for (const key of Object.keys(obj)) delete obj[key];
-        for (const [k, v] of entries) obj[k] = v;
-      }
-    }
-
-    return clone;
+  return clonePathToNode(removed, newParentId, (p) => {
+    const parentPath = p.path === "/" ? "" : p.path;
+    const nodesById = new Map<string, TreeNode>();
+    const newChild = buildSubtree(
+      p.type === "array" ? String(index ?? p.children.length) : node.key,
+      nodeValue,
+      parentPath,
+      p.id,
+      nodesById,
+    );
+    const newChildren = [...p.children];
+    const insertAt = index ?? newChildren.length;
+    newChildren.splice(insertAt, 0, newChild);
+    return reindexArrayChildren({ ...p, children: newChildren });
   });
 }
 
@@ -215,33 +205,12 @@ export function reorderChildren(
   const parent = state.nodesById.get(parentId);
   if (!parent) return state;
 
-  return applyToJson(state, (json) => {
-    const clone = structuredClone(json);
-    const segments = pathSegments(parent);
-    const target = segments.length === 0 ? clone : getAtPath(clone, segments);
-
-    if (target !== null && typeof target === "object") {
-      if (Array.isArray(target)) {
-        const [item] = target.splice(fromIndex, 1);
-        target.splice(toIndex, 0, item);
-      } else {
-        const obj = target as Record<string, JsonValue>;
-        const entries = Object.entries(obj);
-        const [item] = entries.splice(fromIndex, 1);
-        entries.splice(toIndex, 0, item);
-        for (const key of Object.keys(obj)) delete obj[key];
-        for (const [k, v] of entries) obj[k] = v;
-      }
-    }
-
-    return clone;
+  return clonePathToNode(state, parentId, (p) => {
+    const newChildren = [...p.children];
+    const [item] = newChildren.splice(fromIndex, 1);
+    newChildren.splice(toIndex, 0, item);
+    return reindexArrayChildren({ ...p, children: newChildren });
   });
-}
-
-export function getNodeType(value: JsonValue): NodeType {
-  if (value === null) return "null";
-  if (Array.isArray(value)) return "array";
-  return typeof value as NodeType;
 }
 
 function convertValue(current: JsonValue, newType: NodeType): JsonValue {
@@ -305,27 +274,20 @@ export function duplicateNode(state: TreeState, nodeId: string): TreeState {
 
   const nodeValue = toJson(node);
 
-  return applyToJson(state, (json) => {
-    const clone = structuredClone(json);
-    const parentSegments = pathSegments(parent);
-    const target =
-      parentSegments.length === 0 ? clone : getAtPath(clone, parentSegments);
-
-    if (target !== null && typeof target === "object") {
-      if (Array.isArray(target)) {
-        const idx = Number(node.key);
-        target.splice(idx + 1, 0, structuredClone(nodeValue));
-      } else {
-        const obj = target as Record<string, JsonValue>;
-        const entries = Object.entries(obj);
-        const idx = entries.findIndex(([k]) => k === node.key);
-        const newKey = `${node.key}_copy`;
-        entries.splice(idx + 1, 0, [newKey, structuredClone(nodeValue)]);
-        for (const key of Object.keys(obj)) delete obj[key];
-        for (const [k, v] of entries) obj[k] = v;
-      }
-    }
-
-    return clone;
+  return clonePathToNode(state, node.parentId, (p) => {
+    const idx = p.children.findIndex((c) => c.id === nodeId);
+    const parentPath = p.path === "/" ? "" : p.path;
+    const newKey = p.type === "array" ? String(idx + 1) : `${node.key}_copy`;
+    const nodesById = new Map<string, TreeNode>();
+    const newChild = buildSubtree(
+      newKey,
+      structuredClone(nodeValue),
+      parentPath,
+      p.id,
+      nodesById,
+    );
+    const newChildren = [...p.children];
+    newChildren.splice(idx + 1, 0, newChild);
+    return reindexArrayChildren({ ...p, children: newChildren });
   });
 }

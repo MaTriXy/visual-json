@@ -99,8 +99,11 @@ export function validateNode(
         errors.push(`Value must be < ${bound}`);
       }
     }
-    if (schema.multipleOf !== undefined && val % schema.multipleOf !== 0) {
-      errors.push(`Value must be a multiple of ${schema.multipleOf}`);
+    if (schema.multipleOf !== undefined) {
+      const remainder = Math.abs(val % schema.multipleOf);
+      if (remainder > 1e-10 && Math.abs(remainder - schema.multipleOf) > 1e-10) {
+        errors.push(`Value must be a multiple of ${schema.multipleOf}`);
+      }
     }
   }
 

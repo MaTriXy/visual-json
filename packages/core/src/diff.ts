@@ -1,6 +1,6 @@
 import type { JsonValue } from "./types";
 
-export type DiffType = "added" | "removed" | "changed" | "unchanged";
+export type DiffType = "added" | "removed" | "changed";
 
 export interface DiffEntry {
   path: string;
