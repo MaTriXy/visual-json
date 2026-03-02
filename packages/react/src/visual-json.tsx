@@ -15,11 +15,11 @@ import {
   type JsonValue,
   type JsonSchema,
   type TreeState,
-  type SearchMatch,
   type TreeNode,
+  type SearchMatch,
 } from "@visual-json/core";
+import { collectAllIds, getVisibleNodes } from "@visual-json/ui-shared";
 import { StudioContext, type StudioState, type StudioActions } from "./context";
-import { getVisibleNodes } from "./get-visible-nodes";
 import { computeRangeIds } from "./selection-utils";
 
 export interface VisualJsonProps {
@@ -27,14 +27,6 @@ export interface VisualJsonProps {
   onChange?: (value: JsonValue) => void;
   schema?: JsonSchema | null;
   children: ReactNode;
-}
-
-function collectAllIds(node: TreeNode): string[] {
-  const ids: string[] = [node.id];
-  for (const child of node.children) {
-    ids.push(...collectAllIds(child));
-  }
-  return ids;
 }
 
 export function VisualJson({

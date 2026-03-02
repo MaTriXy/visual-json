@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { fromJson, resetIdCounter } from "@visual-json/core";
-import { getVisibleNodes } from "../get-visible-nodes";
+import { getVisibleNodes } from "@visual-json/ui-shared";
 import {
   computeRangeIds,
   computeSelectAllIds,

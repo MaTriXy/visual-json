@@ -13,8 +13,7 @@ import {
 import { useStudio } from "./context";
 import { Breadcrumbs } from "./breadcrumbs";
 import { EnumInput } from "./enum-input";
-import { getDisplayKey } from "./display-key";
-import { getVisibleNodes } from "./get-visible-nodes";
+import { getDisplayKey, getVisibleNodes } from "@visual-json/ui-shared";
 import { deleteSelectedNodes, computeSelectAllIds } from "./selection-utils";
 import {
   useDragDrop,
